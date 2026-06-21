@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field Ledger</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#17312A; --ink-2:#21443A; --paper:#E9E2D1; --surface:#FBF8F0; --surface-2:#F4EFE2;
+    --stamp:#C5402F; --teal:#2C6E63; --gold:#A9781A; --muted:#6E6656;
+    --line:rgba(23,49,42,.14); --line-strong:rgba(23,49,42,.28);
+    --good:#2C6E63; --bad:#C5402F; --warn:#A9781A;
+    --shadow:0 1px 0 rgba(23,49,42,.05), 0 8px 24px -16px rgba(23,49,42,.4);
+    --disp:'Bricolage Grotesque', system-ui, sans-serif;
+    --body:'Inter', system-ui, sans-serif; --mono:'Space Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(197,64,47,.05), transparent 40%),
+      radial-gradient(circle at 88% 4%, rgba(44,110,99,.06), transparent 38%), var(--paper);}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 64px}
+  .mono{font-family:var(--mono)} .danger{color:var(--bad)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+  .top h1{font-family:var(--disp);font-weight:800;font-size:26px;line-height:1.05;margin:2px 0 0;letter-spacing:-.01em}
+  .basebadge{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--surface);background:var(--ink);
+    padding:6px 9px;border-radius:7px;white-space:nowrap}
+  .headright{display:flex;flex-direction:column;align-items:flex-end;gap:1px;line-height:1.15}
+  .codeinline{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.06em;color:var(--ink);white-space:nowrap;line-height:1.15}
+  .syncpill{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;line-height:1.15;
+    cursor:pointer;color:var(--muted);min-height:14px}
+  .syncpill.ok{color:var(--good)} .syncpill.off{color:var(--warn)} .syncpill.s{color:var(--teal)}
+
+  .stamp{position:relative;margin:0 0 22px;padding:18px 20px;background:var(--surface);
+    border:2.5px solid var(--stamp);border-radius:4px;
+    box-shadow:inset 0 0 0 2px var(--surface), inset 0 0 0 3.5px rgba(197,64,47,.4)}
+  .stamp .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--stamp)}
+  .stamp .big{font-family:var(--mono);font-weight:700;font-size:34px;line-height:1.1;margin-top:4px;letter-spacing:-.02em}
+  .stamp .sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--surface-2);
+    padding:4px;border-radius:11px;margin-bottom:18px;border:1px solid var(--line)}
+  .tabs button{font-family:var(--body);font-weight:600;font-size:13px;border:none;background:none;color:var(--muted);
+    padding:9px 4px;border-radius:8px;cursor:pointer;transition:.15s}
+  .tabs button.on{background:var(--ink);color:var(--surface)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:16px;
+    box-shadow:var(--shadow);margin-bottom:14px}
+  .card h2{font-family:var(--disp);font-weight:700;font-size:16px;margin:0 0 12px;letter-spacing:-.01em}
+  label.f{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 5px}
+  input,select{font-family:var(--body);font-size:15px;color:var(--ink);width:100%;padding:11px 12px;
+    background:var(--surface-2);border:1.5px solid var(--line);border-radius:9px;outline:none;transition:.15s}
+  input:focus,select:focus{border-color:var(--teal);background:#fff}
+  input.mono{font-family:var(--mono)}
+  .row{display:flex;gap:9px;margin-bottom:12px} .row>div{flex:1}
+  .amt-row{display:grid;grid-template-columns:1.6fr 1fr;gap:9px}
+  .field{margin-bottom:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-family:var(--body);font-size:13px;font-weight:500;padding:7px 12px;border-radius:20px;cursor:pointer;
+    border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);transition:.12s;user-select:none}
+  .chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .chip.cat.on{background:var(--ink);border-color:var(--ink)}
+  .btn{font-family:var(--body);font-weight:600;font-size:15px;width:100%;padding:13px;border:none;border-radius:10px;
+    background:var(--stamp);color:#fff;cursor:pointer;transition:.15s}
+  .btn:hover{filter:brightness(1.06)}
+  .btn.ghost{background:none;color:var(--ink);border:1.5px solid var(--line-strong)}
+  .btn.dark{background:var(--ink)} .btn.sm{font-size:13px;padding:9px 14px;width:auto;border-radius:8px}
+
+  .daygrp{margin-bottom:16px}
+  .dayhd{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+    display:flex;justify-content:space-between;padding:0 2px 7px;border-bottom:1px dashed var(--line-strong);margin-bottom:8px}
+  .item{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+  .item:last-child{border-bottom:none}
+  .ic{width:34px;height:34px;flex:none;border-radius:9px;display:grid;place-items:center;font-size:17px;
+    background:var(--surface-2);border:1px solid var(--line)}
+  .it-main{flex:1;min-width:0}
+  .it-desc{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it-meta{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it-amt{text-align:right;flex:none}
+  .it-amt .o{font-family:var(--mono);font-weight:700;font-size:14.5px}
+  .it-amt .b{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .ledger-note{font-size:12.5px;color:var(--good);font-weight:600;background:rgba(44,110,99,.1);
+    padding:8px 11px;border-radius:8px;margin-bottom:12px}
+  .item.settled .it-desc,.item.settled .it-amt .o{color:var(--muted)}
+  .tag-settled{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--good);
+    border:1px solid var(--good);border-radius:10px;padding:1px 6px;margin-left:7px;letter-spacing:.04em;white-space:nowrap}
+
+  .empty{text-align:center;padding:30px 16px;color:var(--muted)}
+  .empty .big{font-family:var(--disp);font-weight:700;font-size:17px;color:var(--ink);margin-bottom:5px}
+
+  .bal{display:flex;align-items:center;justify-content:space-between;padding:11px 2px;border-bottom:1px solid var(--line)}
+  .bal:last-child{border-bottom:none}
+  .bal .nm{font-weight:600}
+  .bal .nm small{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:400}
+  .bal .v{font-family:var(--mono);font-weight:700;font-size:15px}
+  .v.pos{color:var(--good)} .v.neg{color:var(--bad)}
+  .settle{display:flex;align-items:center;gap:10px;padding:12px;background:var(--surface-2);border-radius:10px;margin-bottom:8px}
+  .settle .who{font-weight:600;font-size:14px}
+  .settle .arr{color:var(--stamp);font-family:var(--mono);font-weight:700}
+  .settle .amt{margin-left:auto;font-family:var(--mono);font-weight:700;color:var(--ink)}
+  .settle{flex-wrap:wrap}
+  .setbtn{font-family:var(--body);font-size:12px;font-weight:600;border:1.5px solid var(--line-strong);
+    background:none;color:var(--ink);padding:5px 11px;border-radius:16px;cursor:pointer;margin-left:auto}
+  .setbtn.on{background:var(--good);border-color:var(--good);color:#fff}
+  .settle.done{opacity:.55} .settle.done .amt{text-decoration:line-through}
+  .settle.done .setbtn{margin-left:auto}
+  .settled-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);margin:14px 0 8px;border-top:1px dashed var(--line-strong);padding-top:12px}
+  .sheet{display:flex;flex-direction:column;gap:8px} .sheet .btn{width:100%}
+  .event{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;background:var(--surface-2)}
+  .event-hd{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;cursor:pointer;font-weight:600;font-size:13.5px}
+  .event-amt{font-family:var(--mono);font-weight:700;color:var(--ink)} .chev{color:var(--muted);margin-left:6px}
+  .event-body{padding:0 12px 12px}
+  .event-sub{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:9px 0 5px}
+  .event-line{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0}
+  .event-line>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .alldone{text-align:center;color:var(--good);font-weight:600;padding:14px}
+
+  .rate{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line)}
+  .rate:last-child{border-bottom:none}
+  .rate .code{font-family:var(--mono);font-weight:700;font-size:14px;min-width:54px}
+  .rate .conv{font-size:12px;color:var(--muted);font-family:var(--mono)}
+  .rate input{padding:7px 9px;font-size:13px;text-align:right;width:120px;font-family:var(--mono)}
+  .status{font-size:12.5px;color:var(--teal);margin-top:10px;min-height:16px;font-family:var(--mono)}
+
+  .trav{display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line)}
+  .trav:last-child{border-bottom:none}
+  .trav .x{color:var(--bad);background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:18px;line-height:1}
+  .addtrav{display:flex;gap:8px;margin-top:10px} .addtrav input{flex:1}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .cat-pick{display:flex;flex-wrap:wrap;gap:7px}
+
+  .codebox{text-align:center;padding:14px;background:var(--surface-2);border:1.5px dashed var(--stamp);border-radius:11px}
+  .codebox .c{font-family:var(--mono);font-weight:700;font-size:26px;letter-spacing:.12em;color:var(--ink)}
+  .codebox .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--stamp);margin-bottom:4px}
+
+  .setup .logo,.gate .logo{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--stamp);text-align:center}
+  .setup h1,.gate h1{font-family:var(--disp);font-weight:800;font-size:28px;text-align:center;margin:6px 0 2px;letter-spacing:-.01em}
+  .setup .tag,.gate .tag{text-align:center;color:var(--muted);font-size:14px;margin-bottom:22px}
+  .backlink{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:12px;cursor:pointer;
+    text-decoration:underline;padding:6px 0;display:block;margin:0 auto}
+
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--ink);color:var(--surface);font-size:13px;font-weight:500;padding:10px 16px;border-radius:9px;
+    box-shadow:var(--shadow);transition:.25s;pointer-events:none;z-index:50}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  #modal{position:fixed;inset:0;background:rgba(23,49,42,.42);display:none;align-items:center;justify-content:center;
+    z-index:60;padding:22px}
+  #modal.show{display:flex}
+  #modal .box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;
+    max-width:340px;width:100%;box-shadow:var(--shadow)}
+  #modal .mtext{font-size:15px;line-height:1.5;margin-bottom:16px}
+  #modal .mbtns{display:flex;gap:9px} #modal .mbtns .btn{flex:1;width:auto}
+  @media(max-width:380px){ .amt-row{grid-template-columns:1fr} .stamp .big{font-size:28px} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty"><div class="big">Loading…</div></div></div>
+<div id="toast"></div>
+<div id="modal"><div class="box" id="modal-box"></div></div>
+
+<script>
+const API = "/api/trip";
+const LS_CODE = "fieldledger:code";
+const LS_CACHE = "fieldledger:cache:";
+
+const CATS = [
+  {id:'food',     label:'Food & drink', icon:'🍜'},
+  {id:'transport',label:'Transport',    icon:'🚆'},
+  {id:'lodging',  label:'Lodging',      icon:'🏨'},
+  {id:'activity', label:'Activities',   icon:'🎟️'},
+  {id:'shopping', label:'Shopping',     icon:'🛍️'},
+  {id:'other',    label:'Other',        icon:'•'},
+];
+const catOf = id => CATS.find(c=>c.id===id) || CATS[5];
+
+const DEFAULT_CURRENCIES = [
+  {code:'KRW',symbol:'₩',perUSD:1530},{code:'USD',symbol:'$',perUSD:1},
+  {code:'EUR',symbol:'€',perUSD:0.8719},{code:'JPY',symbol:'¥',perUSD:161.275},
+  {code:'GBP',symbol:'£',perUSD:0.7555},{code:'THB',symbol:'฿',perUSD:32.82},
+  {code:'VND',symbol:'₫',perUSD:25400},{code:'SGD',symbol:'S$',perUSD:1.2903},
+  {code:'IDR',symbol:'Rp',perUSD:17821},{code:'PHP',symbol:'₱',perUSD:60.619},
+  {code:'MYR',symbol:'RM',perUSD:4.134},{code:'CNY',symbol:'CN¥',perUSD:6.7647},
+  {code:'HKD',symbol:'HK$',perUSD:7.8368},{code:'TWD',symbol:'NT$',perUSD:31.67},
+  {code:'AUD',symbol:'A$',perUSD:1.4253},{code:'CAD',symbol:'C$',perUSD:1.4147},
+  {code:'CHF',symbol:'Fr',perUSD:0.8067},{code:'INR',symbol:'₹',perUSD:94.31},
+];
+const ZERO_DEC = ['KRW','JPY','IDR','VND','HUF','CLP'];
+
+function freshState(){
+  return { setupComplete:false, screen:'gate', tripCode:null,
+    name:'', baseCurrency:'KRW', travelers:[],
+    currencies:JSON.parse(JSON.stringify(DEFAULT_CURRENCIES)),
+    expenses:[], events:[], activeTab:'log', draftSplit:null };
+}
+let state = freshState();
+let statusMsg = '';
+let sync = 'idle';            // idle | s (syncing) | ok (synced) | off (offline)
+
+/* ---------- only the trip's own data goes to the server ---------- */
+function persistable(){
+  const {activeTab, draftSplit, tripCode, screen, ...rest} = state; return rest;
+}
+
+/* ---------- localStorage: remember code + offline cache ---------- */
+function rememberCode(c){ try{ localStorage.setItem(LS_CODE, c); }catch(e){} }
+function forgetCode(){ try{ localStorage.removeItem(LS_CODE); }catch(e){} }
+function savedCode(){ try{ return localStorage.getItem(LS_CODE); }catch(e){ return null; } }
+function cacheState(){ if(!state.tripCode) return; try{ localStorage.setItem(LS_CACHE+state.tripCode, JSON.stringify(persistable())); }catch(e){} }
+function readCache(code){ try{ const v=localStorage.getItem(LS_CACHE+code); return v?JSON.parse(v):null; }catch(e){ return null; } }
+
+/* ---------- server sync ---------- */
+let saveTimer=null;
+function save(){ cacheState(); if(saveTimer)clearTimeout(saveTimer); saveTimer=setTimeout(flushSave,500); }
+async function flushSave(){
+  saveTimer=null; if(!state.tripCode) return;
+  setSync('s');
+  try{
+    const res=await fetch(API+'?code='+encodeURIComponent(state.tripCode),{
+      method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(persistable())});
+    if(!res.ok) throw 0; setSync('ok');
+  }catch(e){ setSync('off'); }
+}
+async function pullLoad(code){
+  const res=await fetch(API+'?code='+encodeURIComponent(code));
+  if(!res.ok) throw new Error('load'); const j=await res.json(); return j.data;
+}
+function applyRemote(d){
+  if(!d) return;
+  const keep={activeTab:state.activeTab, tripCode:state.tripCode, screen:state.screen, draftSplit:state.draftSplit};
+  state={...freshState(), ...d, ...keep, setupComplete:true};
+}
+async function syncNow(){
+  if(!state.tripCode) return; setSync('s');
+  try{ const d=await pullLoad(state.tripCode); if(d) applyRemote(d); setSync('ok'); render(); }
+  catch(e){ setSync('off'); }
+}
+function setSync(s){ sync=s; const el=$('#syncpill'); if(el) el.outerHTML=syncPill(); }
+function syncPill(){
+  const map={idle:['','',''],s:['Syncing…','s'],ok:['Synced','ok'],off:['Offline — not saved','off']};
+  const [t,c]=map[sync]||['','']; 
+  return `<span id="syncpill" class="syncpill ${c}" onclick="syncNow()" title="Tap to sync now">${t?('↻ '+t):''}</span>`;
+}
+
+/* ---------- helpers ---------- */
+const $ = sel => document.querySelector(sel);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cur = code => state.currencies.find(c=>c.code===code);
+const isActive = c => c.active!==false;   // currencies are shown unless explicitly hidden
+const sym = code => (cur(code)||{}).symbol || code+' ';
+const dec = code => ZERO_DEC.includes(code) ? 0 : 2;
+function fmt(a,code){ const d=dec(code); return (a||0).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function money(a,code){ return sym(code)+fmt(a,code); }
+function toBase(a,code){ const f=cur(code),b=cur(state.baseCurrency); if(!f||!b)return 0; return (a/f.perUSD)*b.perUSD; }
+const nameOf = id => (state.travelers.find(t=>t.id===id)||{}).name || '—';
+const today = () => new Date().toISOString().slice(0,10);
+function prettyDate(iso){
+  const t=today(); if(iso===t)return 'Today';
+  const y=new Date(Date.now()-864e5).toISOString().slice(0,10); if(iso===y)return 'Yesterday';
+  return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function genCode(){ const a='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++){ s+=a[Math.floor(Math.random()*a.length)]; if(i===2)s+='-'; } return s; }
+function toast(msg){ const el=$('#toast'); if(!el)return; el.textContent=msg; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1700); }
+function openModal(html){ const m=$('#modal'); if(!m)return; $('#modal-box').innerHTML=html; m.classList.add('show'); m.onclick=e=>{ if(e.target===m) closeModal(); }; }
+function closeModal(){ const m=$('#modal'); if(!m)return; m.classList.remove('show'); m.onclick=null; $('#modal-box').innerHTML=''; }
+function confirmDialog(message, onYes, yesLabel){
+  if(!$('#modal')){ onYes(); return; }
+  openModal(`<div class="mtext">${esc(message)}</div><div class="mbtns">
+    <button class="btn ghost sm" onclick="closeModal()">Cancel</button>
+    <button class="btn sm" id="m-yes">${esc(yesLabel||'Confirm')}</button></div>`);
+  $('#m-yes').onclick=()=>{ closeModal(); onYes(); };
+}
+// Tap a ledger row -> choose settled status or delete (per-item control).
+function itemActions(id){
+  const e=state.expenses.find(x=>x.id===id); if(!e)return;
+  const done=!!e.settled;
+  openModal(`<div class="mtext"><strong>${esc(e.desc)}</strong><br>
+    <span style="color:var(--muted);font-size:13px">${money(e.amount,e.currency)} · ${esc(nameOf(e.paidBy))} paid</span></div>
+    <div class="sheet">
+      <button class="btn sm" onclick="setItemSettled('${id}',${done?'false':'true'})">${done?'Mark as not settled':'Mark as settled'}</button>
+      <button class="btn ghost sm" onclick="askDelete('${id}')"><span class="danger">Delete expense</span></button>
+      <button class="btn ghost sm" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+function setItemSettled(id,val){ const e=state.expenses.find(x=>x.id===id); if(e){ e.settled=(val===true||val==='true'); save(); } closeModal(); render(); }
+function askDelete(id){ closeModal(); confirmDialog('Delete this expense?', ()=>{ state.expenses=state.expenses.filter(e=>e.id!==id); save(); render(); }, 'Delete'); }
+// Settle just the items behind one relationship: items the creditor paid and the debtor shares in.
+function settleRelationship(from,to){
+  const affected=state.expenses.filter(e=>!e.settled && e.paidBy===to &&
+    ((e.splitAmong&&e.splitAmong.length?e.splitAmong:state.travelers.map(t=>t.id)).includes(from)));
+  affected.forEach(e=>e.settled=true); save(); render(); toast('Settled '+nameOf(from)+' → '+nameOf(to));
+}
+function askSettleRel(from,to){ confirmDialog('Mark all items in '+nameOf(from)+' → '+nameOf(to)+' as settled?', ()=>settleRelationship(from,to), 'Settle'); }
+function askSettleAll(){ confirmDialog('Mark all outstanding items as settled?', ()=>{ state.expenses.forEach(e=>{ if(!e.settled)e.settled=true; }); save(); render(); }, 'Settle all'); }
+function copyCode(){ if(navigator.clipboard) navigator.clipboard.writeText(state.tripCode).then(()=>toast('Trip code copied')); else toast(state.tripCode); }
+
+/* ---------- computations ---------- */
+function tripTotal(){ return state.expenses.reduce((s,e)=>s+toBase(e.amount,e.currency),0); }
+function byCategory(){ const m={}; state.expenses.forEach(e=>{m[e.category]=(m[e.category]||0)+toBase(e.amount,e.currency);}); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function netFrom(expenses){
+  const net={}; state.travelers.forEach(t=>net[t.id]=0);
+  expenses.forEach(e=>{
+    const b=toBase(e.amount,e.currency);
+    if(net[e.paidBy]!==undefined) net[e.paidBy]+=b;
+    const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
+    const share=b/grp.length; grp.forEach(id=>{ if(net[id]!==undefined) net[id]-=share; });
+  });
+  return net;
+}
+function transfersFrom(net){
+  let cr=state.travelers.map(t=>({id:t.id,amt:net[t.id]||0})).filter(x=>x.amt>0.5).sort((a,b)=>b.amt-a.amt);
+  let db=state.travelers.map(t=>({id:t.id,amt:-(net[t.id]||0)})).filter(x=>x.amt>0.5).sort((a,b)=>b.amt-a.amt);
+  const tr=[]; let i=0,j=0;
+  while(i<db.length&&j<cr.length){ const pay=Math.min(db[i].amt,cr[j].amt); tr.push({from:db[i].id,to:cr[j].id,amt:pay});
+    db[i].amt-=pay; cr[j].amt-=pay; if(db[i].amt<0.5)i++; if(cr[j].amt<0.5)j++; }
+  return tr;
+}
+// Each expense carries its own `settled` flag (the source of truth). Outstanding
+// balances come only from unsettled expenses, so settling never touches new items.
+function settlementInfo(){
+  const unsettled=state.expenses.filter(e=>!e.settled);
+  const adj=netFrom(unsettled);
+  const transfers=transfersFrom(adj);
+  const anySettled=state.expenses.some(e=>e.settled);
+  return {adj, transfers, events:(state.events||[]), anySettled, allDone:transfers.length===0 && anySettled};
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  const app=$('#app');
+  if(!state.setupComplete){
+    if(state.screen==='setup'){ app.innerHTML=setupView(); renderSetupTravelers(); }
+    else if(state.screen==='join'){ app.innerHTML=joinView(); }
+    else app.innerHTML=gateView();
+    return;
+  }
+  app.innerHTML=headerView()+tabsView()+tabContent();
+}
+
+/* ----- gate: create or join ----- */
+function gateView(){
+  return `<div class="gate">
+    <div class="logo">◇ Field Ledger ◇</div>
+    <h1>Track the trip together</h1>
+    <div class="tag">One shared ledger across everyone's phones. Multi-currency, auto-settled.</div>
+    <div class="card">
+      <button class="btn" onclick="state.screen='setup';render()">Start a new trip</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="state.screen='join';render()">Join with a code</button>
+      <div class="hint">Start a trip and you'll get a short code. Share it with your companions so everyone logs into the same ledger.</div>
+    </div>
+  </div>`;
+}
+function joinView(){
+  return `<div class="gate">
+    <div class="logo">◇ Field Ledger ◇</div>
+    <h1>Join a trip</h1>
+    <div class="tag">Enter the code a companion shared with you.</div>
+    <div class="card">
+      <div class="field"><label class="f">Trip code</label>
+        <input id="jn-code" class="mono" placeholder="ABC-D2F" style="text-transform:uppercase;letter-spacing:.1em"
+          onkeydown="if(event.key==='Enter')joinTrip()"></div>
+      <button class="btn" onclick="joinTrip()">Join trip →</button>
+    </div>
+    <button class="backlink" onclick="state.screen='gate';render()">← Back</button>
+  </div>`;
+}
+async function joinTrip(){
+  const code=($('#jn-code').value||'').trim().toUpperCase();
+  if(!code){ toast('Enter a trip code.'); return; }
+  toast('Looking up trip…');
+  try{
+    const d=await pullLoad(code);
+    if(!d){ toast('No trip found with code '+code); return; }
+    state.tripCode=code; applyRemote(d); rememberCode(code); cacheState();
+    setSync('ok'); render();
+  }catch(e){ toast("Couldn't reach the server. Check your connection."); }
+}
+
+/* ----- setup (new trip) ----- */
+function setupView(){
+  return `<div class="setup">
+    <div class="logo">◇ Field Ledger ◇</div>
+    <h1>New trip</h1>
+    <div class="tag">Set it up once — your code keeps everyone in sync.</div>
+    <div class="card">
+      <div class="field"><label class="f">Trip name</label>
+        <input id="su-name" placeholder="e.g. Southeast Asia 2026"></div>
+      <div class="field"><label class="f">Settle everything in</label>
+        ${currencySelect('su-base', state.baseCurrency)}
+        <div class="hint">Every expense converts to this currency so totals and who-owes-whom stay consistent.</div></div>
+      <div class="field"><label class="f">Who's on the trip</label>
+        <div id="su-travelers"></div>
+        <div class="addtrav">
+          <input id="su-newtrav" placeholder="Add a traveler" onkeydown="if(event.key==='Enter')addSetupTraveler()">
+          <button class="btn dark sm" onclick="addSetupTraveler()">Add</button></div></div>
+      <button class="btn" onclick="finishSetup()">Create trip →</button>
+    </div>
+    <button class="backlink" onclick="state.screen='gate';render()">← Back</button>
+  </div>`;
+}
+let setupTravelers=[];
+function renderSetupTravelers(){
+  const el=$('#su-travelers'); if(!el)return;
+  el.innerHTML = setupTravelers.length
+    ? setupTravelers.map((n,i)=>`<div class="trav"><span>${esc(n)}</span>
+        <button class="x" onclick="setupTravelers.splice(${i},1);renderSetupTravelers()">×</button></div>`).join('')
+    : `<div class="hint">Add yourself and your travel companions.</div>`;
+}
+function addSetupTraveler(){ const inp=$('#su-newtrav'); const v=inp.value.trim(); if(v){ setupTravelers.push(v); inp.value=''; renderSetupTravelers(); inp.focus(); } }
+function finishSetup(){
+  const name=$('#su-name').value.trim()||'My Trip'; const base=$('#su-base').value;
+  if(setupTravelers.length<1){ toast('Add at least one traveler.'); return; }
+  state.name=name; state.baseCurrency=base;
+  state.travelers=setupTravelers.map(n=>({id:uid(),name:n}));
+  state.tripCode=genCode(); state.setupComplete=true; state.screen='app';
+  rememberCode(state.tripCode); render(); flushSave();
+  toast('Trip created — share your code');
+}
+
+function currencySelect(id, sel){
+  const list=state.currencies.filter(c=> isActive(c) || c.code===sel || c.code===state.baseCurrency);
+  return `<select id="${id}">${list.map(c=>
+    `<option value="${c.code}" ${c.code===sel?'selected':''}>${c.code} — ${c.symbol}</option>`).join('')}</select>`;
+}
+
+/* ----- main header ----- */
+function headerView(){
+  const total=tripTotal();
+  return `<div class="top">
+    <div><h1>${esc(state.name)}</h1></div>
+    <div class="headright">
+      <span class="codeinline">${esc(state.tripCode)}</span>
+      ${syncPill()}
+    </div>
+  </div>
+  <div class="stamp">
+    <div class="lbl">Total spent so far</div>
+    <div class="big">${money(total,state.baseCurrency)}</div>
+    <div class="sub">${state.expenses.length} ${state.expenses.length===1?'entry':'entries'} · ${state.travelers.length} ${state.travelers.length===1?'traveler':'travelers'}</div>
+  </div>`;
+}
+function tabsView(){
+  const tabs=[['log','Log'],['balances','Balances'],['rates','Rates'],['trip','Trip']];
+  return `<div class="tabs">${tabs.map(([k,l])=>`<button class="${state.activeTab===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('')}</div>`;
+}
+function tabContent(){
+  if(state.activeTab==='log') return addForm()+ledger();
+  if(state.activeTab==='balances') return balancesView();
+  if(state.activeTab==='rates') return ratesView();
+  if(state.activeTab==='trip') return tripView();
+}
+
+/* ----- log ----- */
+let pickedCat='food';
+function addForm(){
+  if(state.draftSplit===null) state.draftSplit=state.travelers.map(t=>t.id);
+  const travOpts=state.travelers.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  return `<div class="card">
+    <h2>Add an expense</h2>
+    <div class="amt-row">
+      <div><label class="f">Amount</label><input id="ax-amt" class="mono" inputmode="decimal" placeholder="0"></div>
+      <div><label class="f">Currency</label>${currencySelect('ax-cur', lastUsedCurrency())}</div></div>
+    <div class="field"><label class="f">What for</label><input id="ax-desc" placeholder="e.g. Dinner at night market"></div>
+    <div class="field"><label class="f">Category</label>
+      <div class="cat-pick" id="ax-cats">${CATS.map((c,i)=>`<span class="chip cat ${c.id===pickedCat?'on':''}" data-cat="${c.id}" onclick="pickCat('${c.id}')">${c.icon} ${c.label}</span>`).join('')}</div></div>
+    <div class="row">
+      <div><label class="f">Paid by</label><select id="ax-paid">${travOpts}</select></div>
+      <div><label class="f">Date</label><input id="ax-date" type="date" value="${today()}"></div></div>
+    <div class="field"><label class="f">Split between</label>
+      <div class="chips" id="ax-split">${state.travelers.map(t=>`<span class="chip ${state.draftSplit.includes(t.id)?'on':''}" data-id="${t.id}" onclick="toggleSplit('${t.id}')">${esc(t.name)}</span>`).join('')}</div></div>
+    <button class="btn" onclick="addExpense()">Add to ledger</button>
+  </div>`;
+}
+function pickCat(id){ pickedCat=id; document.querySelectorAll('#ax-cats .chip').forEach(c=>c.classList.toggle('on',c.dataset.cat===id)); }
+function toggleSplit(id){
+  const i=state.draftSplit.indexOf(id);
+  if(i>=0){ if(state.draftSplit.length>1) state.draftSplit.splice(i,1); } else state.draftSplit.push(id);
+  document.querySelectorAll('#ax-split .chip').forEach(c=>c.classList.toggle('on',state.draftSplit.includes(c.dataset.id)));
+}
+function lastUsedCurrency(){ return state.expenses.length?state.expenses[state.expenses.length-1].currency:state.baseCurrency; }
+function addExpense(){
+  const amt=parseFloat($('#ax-amt').value);
+  if(!amt||amt<=0){ toast('Enter an amount first.'); return; }
+  state.expenses.push({ id:uid(), amount:amt, currency:$('#ax-cur').value,
+    desc:$('#ax-desc').value.trim()||catOf(pickedCat).label, category:pickedCat,
+    paidBy:$('#ax-paid').value, date:$('#ax-date').value||today(), splitAmong:[...state.draftSplit], settled:false });
+  pickedCat='food'; state.draftSplit=state.travelers.map(t=>t.id); save(); render();
+}
+function deleteExpense(id){ confirmDialog('Delete this expense?', ()=>{ state.expenses=state.expenses.filter(e=>e.id!==id); save(); render(); }, 'Delete'); }
+function ledger(){
+  if(!state.expenses.length) return `<div class="card"><div class="empty"><div class="big">No expenses yet</div>Add your first one above — coffee, the airport taxi, anything.</div></div>`;
+  const groups={}; state.expenses.forEach(e=>{(groups[e.date]=groups[e.date]||[]).push(e);});
+  const dates=Object.keys(groups).sort().reverse();
+  const allDone = settlementInfo().allDone;
+  let html=`<div class="card"><h2>Ledger</h2>${allDone?'<div class="ledger-note">✓ All payments settled — everyone\'s squared up.</div>':''}`;
+  dates.forEach(d=>{
+    const items=groups[d]; const dayTotal=items.reduce((s,e)=>s+toBase(e.amount,e.currency),0);
+    html+=`<div class="daygrp"><div class="dayhd"><span>${prettyDate(d)}</span><span>${money(dayTotal,state.baseCurrency)}</span></div>`;
+    items.forEach(e=>{
+      const c=catOf(e.category);
+      const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
+      const splitTxt=grp.length===state.travelers.length?'everyone':grp.map(nameOf).join(', ');
+      const conv=e.currency!==state.baseCurrency?`<div class="b">${money(toBase(e.amount,e.currency),state.baseCurrency)}</div>`:'';
+      const isSettled = !!e.settled;
+      html+=`<div class="item${isSettled?' settled':''}" onclick="itemActions('${e.id}')" title="Tap for options">
+        <div class="ic">${c.icon}</div>
+        <div class="it-main"><div class="it-desc">${esc(e.desc)}${isSettled?'<span class="tag-settled">✓ settled</span>':''}</div>
+          <div class="it-meta">${esc(nameOf(e.paidBy))} paid · split ${esc(splitTxt)}</div></div>
+        <div class="it-amt"><div class="o">${money(e.amount,e.currency)}</div>${conv}</div></div>`;
+    });
+    html+=`</div>`;
+  });
+  return html+`</div>`;
+}
+
+/* ----- balances ----- */
+function balancesView(){
+  if(!state.expenses.length) return `<div class="card"><div class="empty"><div class="big">Nothing to settle yet</div>Log a few expenses and this fills in automatically.</div></div>`;
+  const {adj,transfers,events,anySettled}=settlementInfo();
+  let html=`<div class="card"><h2>Where everyone stands</h2>`;
+  state.travelers.forEach(t=>{
+    const v=adj[t.id]||0; const cls=v>0.5?'pos':(v<-0.5?'neg':''); const tag=v>0.5?'is owed':(v<-0.5?'owes':'settled');
+    html+=`<div class="bal"><div class="nm">${esc(t.name)}<small>${tag}</small></div>
+      <div class="v ${cls}">${v>=0?'+':'−'}${money(Math.abs(v),state.baseCurrency)}</div></div>`;
+  });
+  html+=`</div><div class="card"><h2>Settle up</h2>`;
+  if(transfers.length){
+    transfers.forEach(tr=>{
+      html+=`<div class="settle"><span class="who">${esc(nameOf(tr.from))}</span><span class="arr">→</span><span class="who">${esc(nameOf(tr.to))}</span>
+        <span class="amt">${money(tr.amt,state.baseCurrency)}</span>
+        <button class="setbtn" onclick="askSettleRel('${tr.from}','${tr.to}')">Mark settled</button></div>`;
+    });
+  }else{
+    html+=`<div class="alldone">✓ ${anySettled?'All square — everyone\'s settled up.':'All square — nobody owes anyone.'}</div>`;
+  }
+  html+=`<div class="hint">${transfers.length?'Tap Mark settled to clear just that relationship\'s items.':'Everyone is square'} · amounts in ${state.baseCurrency}.</div>`;
+  html+=`</div>`;
+  const cats=byCategory();
+  if(cats.length){
+    const total=tripTotal(); html+=`<div class="card"><h2>By category</h2>`;
+    cats.forEach(([id,v])=>{ const c=catOf(id); const pct=total?Math.round(v/total*100):0;
+      html+=`<div class="bal"><div class="nm">${c.icon} ${c.label}<small>${pct}% of trip</small></div><div class="v">${money(v,state.baseCurrency)}</div></div>`; });
+    html+=`</div>`;
+  }
+  return html;
+}
+
+/* ----- rates ----- */
+function ratesView(){
+  let html=`<div class="card"><h2>Exchange rates</h2>
+    <div class="hint">Seeded with mid-market rates and editable anytime. Edits sync to everyone on the trip. Your card or cash exchange may differ slightly.</div>
+    <div style="margin:14px 0 4px"><button class="btn dark sm" onclick="refreshRates()">↻ Fetch latest rates</button></div>
+    <div class="status" id="rate-status">${esc(statusMsg)}</div><div style="margin-top:10px">`;
+  const ordered=[...state.currencies].filter(c=> isActive(c) || c.code===state.baseCurrency)
+    .sort((a,b)=>a.code===state.baseCurrency?-1:b.code===state.baseCurrency?1:0);
+  ordered.forEach(c=>{
+    const isBase=c.code===state.baseCurrency;
+    const inBase=parseFloat(toBase(1,c.code).toPrecision(6));
+    html+=`<div class="rate"><span class="code">${c.symbol} ${c.code}</span>
+      <span class="conv">${isBase?'base currency':state.baseCurrency+' per 1 '+c.code}</span>
+      ${isBase?'<span></span>':`<input class="mono" inputmode="decimal" value="${inBase}" onchange="setRate('${c.code}',this.value)" title="${state.baseCurrency} per 1 ${c.code}">`}</div>`;
+  });
+  return html+`</div></div>`;
+}
+function setRate(code,val){
+  const r=parseFloat(val); if(!r||r<=0)return;
+  const c=cur(code), b=cur(state.baseCurrency);
+  if(c&&b){ c.perUSD = b.perUSD / r; save(); render(); }   // r = base units per 1 [code]
+}
+async function refreshRates(){
+  setRateStatus('Fetching latest rates…');
+  for(const url of ['https://open.er-api.com/v6/latest/USD','https://api.frankfurter.app/latest?from=USD']){
+    try{ const res=await fetch(url); const data=await res.json(); const rates=data.rates;
+      if(rates&&Object.keys(rates).length){ let n=0;
+        state.currencies.forEach(c=>{ if(c.code==='USD'){c.perUSD=1;return;} if(rates[c.code]){c.perUSD=rates[c.code];n++;} });
+        save(); render(); setRateStatus('✓ Updated '+n+' rates just now.'); return; }
+    }catch(e){}
+  }
+  setRateStatus("Couldn't reach a rate service — edit any rate below by hand.");
+}
+function setRateStatus(m){ statusMsg=m; const el=$('#rate-status'); if(el) el.textContent=m; }
+
+/* ----- trip / settings ----- */
+function tripView(){
+  return `<div class="card"><h2>Your trip code</h2>
+    <div class="codebox"><div class="l">Share to sync</div><div class="c" onclick="copyCode()" style="cursor:pointer">${esc(state.tripCode)}</div></div>
+    <button class="btn dark" style="margin-top:12px" onclick="copyCode()">Copy code</button>
+    <div class="hint">Anyone who enters this code on their phone sees and edits the same ledger. Changes sync automatically; tap “${esc('Synced')}” at the top to pull the latest.</div>
+  </div>
+  <div class="card"><h2>Trip settings</h2>
+    <div class="field"><label class="f">Trip name</label>
+      <input id="tr-name" value="${esc(state.name)}" onchange="state.name=this.value.trim()||state.name;save();render()"></div>
+    <div class="field"><label class="f">Settle everything in</label>${currencySelect('tr-base', state.baseCurrency)}
+      <div class="hint">Switching re-converts all totals. Entries keep their original currency.</div>
+      <button class="btn ghost sm" style="margin-top:8px" onclick="changeBase()">Apply base currency</button></div>
+  </div>
+  <div class="card"><h2>Currencies shown</h2>
+    <div class="hint">Pick which currencies appear in the dropdowns. Hiding one doesn't change past expenses.</div>
+    <div class="chips" style="margin-top:11px">
+      ${state.currencies.map(c=>{ const on=isActive(c); const base=c.code===state.baseCurrency;
+        return `<span class="chip ${on?'on':''}" ${base?'style="opacity:.55;cursor:default"':`onclick="toggleCurrency('${c.code}')"`}>${c.code}</span>`;
+      }).join('')}
+    </div>
+  </div>
+  <div class="card"><h2>Travelers</h2>
+    <div id="tr-travelers">${state.travelers.map(t=>`<div class="trav"><span>${esc(t.name)}</span><button class="x" onclick="removeTraveler('${t.id}')" title="Remove">×</button></div>`).join('')}</div>
+    <div class="addtrav"><input id="tr-newtrav" placeholder="Add a traveler" onkeydown="if(event.key==='Enter')addTraveler()"><button class="btn dark sm" onclick="addTraveler()">Add</button></div>
+    <div class="hint">Removing someone keeps their past expenses but drops them from future splits.</div>
+  </div>
+  <div class="card"><h2>Export & exit</h2>
+    <button class="btn dark" onclick="exportCSV()">⤓ Export as CSV</button>
+    <button class="btn ghost" style="margin-top:9px" onclick="switchTrip()">Leave / switch trip</button>
+    <button class="btn ghost" style="margin-top:9px" onclick="resetTrip()"><span class="danger">Delete this trip for everyone</span></button>
+    <div class="hint">Leaving just removes the trip from this device — rejoin anytime with the code. Deleting wipes the shared data permanently.</div>
+  </div>`;
+}
+function changeBase(){ state.baseCurrency=$('#tr-base').value; save(); render(); }
+function addTraveler(){ const inp=$('#tr-newtrav'); const v=inp.value.trim(); if(v){ state.travelers.push({id:uid(),name:v}); save(); render(); } }
+function removeTraveler(id){ if(state.travelers.length<=1){ toast('You need at least one traveler.'); return; } confirmDialog('Remove '+nameOf(id)+' from the trip?', ()=>{ state.travelers=state.travelers.filter(t=>t.id!==id); save(); render(); }, 'Remove'); }
+function switchTrip(){ confirmDialog('Leave this trip on this device? Your companions keep it and you can rejoin with the code.', ()=>{ forgetCode(); setupTravelers=[]; state=freshState(); render(); }, 'Leave'); }
+function resetTrip(){
+  confirmDialog('Delete ALL data for this trip, for everyone? This cannot be undone.', async ()=>{
+    try{ await fetch(API+'?code='+encodeURIComponent(state.tripCode),{method:'DELETE'}); }catch(e){}
+    forgetCode(); setupTravelers=[]; state=freshState(); render(); toast('Trip deleted');
+  }, 'Delete');
+}
+function exportCSV(){
+  const rows=[['Date','Description','Category','Amount','Currency','In '+state.baseCurrency,'Paid by','Split between']];
+  state.expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
+    const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
+    rows.push([e.date,e.desc,catOf(e.category).label,e.amount,e.currency,toBase(e.amount,e.currency).toFixed(2),nameOf(e.paidBy),grp.map(nameOf).join('; ')]);
+  });
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  try{ const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=(state.name||'trip').replace(/\s+/g,'-')+'-expenses.csv';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }catch(e){ toast('Export not available here'); }
+}
+
+/* ---------- nav + boot ---------- */
+function go(tab){ state.activeTab=tab; render(); }
+function toggleCurrency(code){ if(code===state.baseCurrency)return; const c=cur(code); if(!c)return; c.active=(c.active===false); save(); render(); }
+
+(async function boot(){
+  const code=savedCode();
+  if(code){
+    state.tripCode=code;
+    const cached=readCache(code);
+    if(cached){ applyRemote(cached); render(); }            // instant paint from cache
+    try{
+      const d=await pullLoad(code);
+      if(d){ applyRemote(d); rememberCode(code); render(); setSync('ok'); }
+      else if(!cached){ forgetCode(); state=freshState(); render(); }  // trip was deleted server-side
+    }catch(e){ if(!cached){ state=freshState(); render(); } else setSync('off'); }
+  }else{
+    state=freshState(); render();
+  }
+  // pull fresh data when the tab regains focus (unless the user is mid-typing)
+  window.addEventListener('focus',()=>{
+    const t=document.activeElement&&document.activeElement.tagName;
+    if(state.setupComplete && t!=='INPUT' && t!=='SELECT') syncNow();
+  });
+})();
+</script>
+</body>
+</html>

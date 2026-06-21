@@ -1,0 +1,10 @@
+# Field Ledger — Netlify configuration
+[build]
+  publish = "public"          # static frontend lives here
+  functions = "netlify/functions"
+
+# Friendly route for the data API (also set via export const config in the function)
+[[redirects]]
+  from = "/api/trip"
+  to = "/.netlify/functions/trip"
+  status = 200

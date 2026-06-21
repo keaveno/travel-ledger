@@ -1,0 +1,10 @@
+{
+  "name": "field-ledger-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared multi-currency travel expense tracker backed by Netlify Blobs.",
+  "dependencies": {
+    "@netlify/blobs": "latest"
+  }
+}
