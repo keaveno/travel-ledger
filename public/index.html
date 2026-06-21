@@ -206,7 +206,7 @@ let sync = 'idle';            // idle | s (syncing) | ok (synced) | off (offline
 
 /* ---------- only the trip's own data goes to the server ---------- */
 function persistable(){
-  const {activeTab, draftSplit, tripCode, screen, ...rest} = state; return rest;
+  const {activeTab, draftSplit, draftItems, tripCode, screen, ...rest} = state; return rest;
 }
 
 /* ---------- localStorage: remember code + offline cache ---------- */
@@ -234,7 +234,7 @@ async function pullLoad(code){
 }
 function applyRemote(d){
   if(!d) return;
-  const keep={activeTab:state.activeTab, tripCode:state.tripCode, screen:state.screen, draftSplit:state.draftSplit};
+  const keep={activeTab:state.activeTab, tripCode:state.tripCode, screen:state.screen, draftSplit:state.draftSplit, draftItems:state.draftItems};
   state={...freshState(), ...d, ...keep, setupComplete:true};
 }
 async function syncNow(){
@@ -260,10 +260,11 @@ function fmt(a,code){ const d=dec(code); return (a||0).toLocaleString('en-US',{m
 function money(a,code){ return sym(code)+fmt(a,code); }
 function toBase(a,code){ const f=cur(code),b=cur(state.baseCurrency); if(!f||!b)return 0; return (a/f.perUSD)*b.perUSD; }
 const nameOf = id => (state.travelers.find(t=>t.id===id)||{}).name || '—';
-const today = () => new Date().toISOString().slice(0,10);
+const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today = () => localISO(new Date());
 function prettyDate(iso){
   const t=today(); if(iso===t)return 'Today';
-  const y=new Date(Date.now()-864e5).toISOString().slice(0,10); if(iso===y)return 'Yesterday';
+  const y=localISO(new Date(Date.now()-864e5)); if(iso===y)return 'Yesterday';
   return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
@@ -283,7 +284,8 @@ function itemActions(id){
   const e=state.expenses.find(x=>x.id===id); if(!e)return;
   const done=!!e.settled;
   openModal(`<div class="mtext"><strong>${esc(e.desc)}</strong><br>
-    <span style="color:var(--muted);font-size:13px">${money(e.amount,e.currency)} · ${esc(nameOf(e.paidBy))} paid</span></div>
+    <span style="color:var(--muted);font-size:13px">${money(e.amount,e.currency)} · ${esc(nameOf(e.paidBy))} paid</span>
+    ${e.items&&e.items.length?`<div style="margin-top:6px;font-size:12.5px;color:var(--muted)">${e.items.map(it=>`${esc(it.desc||'item')} · ${money(it.amount,e.currency)}`).join('<br>')}</div>`:''}</div>
     <div class="sheet">
       <button class="btn sm" onclick="setItemSettled('${id}',${done?'false':'true'})">${done?'Mark as not settled':'Mark as settled'}</button>
       <button class="btn ghost sm" onclick="askDelete('${id}')"><span class="danger">Delete expense</span></button>
@@ -469,6 +471,9 @@ function addForm(){
       <div><label class="f">Amount</label><input id="ax-amt" class="mono" inputmode="decimal" placeholder="0"></div>
       <div><label class="f">Currency</label>${currencySelect('ax-cur', lastUsedCurrency())}</div></div>
     <div class="field"><label class="f">What for</label><input id="ax-desc" placeholder="e.g. Dinner at night market"></div>
+    <div class="field"><label class="f">Items <span style="color:var(--muted);font-weight:400">(optional breakdown)</span></label>
+      <div id="ax-items">${itemRowsHTML()}</div>
+      <button type="button" class="btn ghost sm" onclick="addDraftItem()">+ add item</button></div>
     <div class="field"><label class="f">Category</label>
       <div class="cat-pick" id="ax-cats">${CATS.map((c,i)=>`<span class="chip cat ${c.id===pickedCat?'on':''}" data-cat="${c.id}" onclick="pickCat('${c.id}')">${c.icon} ${c.label}</span>`).join('')}</div></div>
     <div class="row">
@@ -479,6 +484,24 @@ function addForm(){
     <button class="btn" onclick="addExpense()">Add to ledger</button>
   </div>`;
 }
+function itemRowsHTML(){
+  if(!Array.isArray(state.draftItems)) state.draftItems=[];
+  const rows=state.draftItems.map((it,i)=>`<div class="ax-item" style="display:flex;gap:6px;margin-bottom:6px">
+    <input class="axi-desc" style="flex:1" placeholder="item" value="${esc(it.desc||'')}">
+    <input class="axi-amt mono" style="width:90px" inputmode="decimal" placeholder="0" value="${esc(String(it.amount??''))}">
+    <button type="button" class="btn ghost sm" onclick="removeDraftItem(${i})">✕</button></div>`).join('');
+  if(!state.draftItems.length) return rows;
+  const code=($('#ax-cur')&&$('#ax-cur').value)||lastUsedCurrency();
+  const sum=state.draftItems.reduce((s,it)=>s+(parseFloat(it.amount)||0),0);
+  return rows+`<div class="hint">Items total ${money(sum,code)}</div>`;
+}
+function syncDraftItems(){
+  if(!Array.isArray(state.draftItems)) state.draftItems=[];
+  state.draftItems=Array.from(document.querySelectorAll('#ax-items .ax-item')).map(r=>({desc:r.querySelector('.axi-desc').value, amount:r.querySelector('.axi-amt').value}));
+}
+function renderDraftItems(){ const c=$('#ax-items'); if(c) c.innerHTML=itemRowsHTML(); }
+function addDraftItem(){ syncDraftItems(); state.draftItems.push({desc:'',amount:''}); renderDraftItems(); }
+function removeDraftItem(i){ syncDraftItems(); state.draftItems.splice(i,1); renderDraftItems(); }
 function pickCat(id){ pickedCat=id; document.querySelectorAll('#ax-cats .chip').forEach(c=>c.classList.toggle('on',c.dataset.cat===id)); }
 function toggleSplit(id){
   const i=state.draftSplit.indexOf(id);
@@ -487,12 +510,16 @@ function toggleSplit(id){
 }
 function lastUsedCurrency(){ return state.expenses.length?state.expenses[state.expenses.length-1].currency:state.baseCurrency; }
 function addExpense(){
-  const amt=parseFloat($('#ax-amt').value);
+  syncDraftItems();
+  const items=state.draftItems.map(it=>({desc:(it.desc||'').trim(), amount:parseFloat(it.amount)||0})).filter(it=>it.desc||it.amount);
+  let amt=parseFloat($('#ax-amt').value);
+  if((!amt||amt<=0) && items.length) amt=items.reduce((s,it)=>s+it.amount,0);
   if(!amt||amt<=0){ toast('Enter an amount first.'); return; }
   state.expenses.push({ id:uid(), amount:amt, currency:$('#ax-cur').value,
     desc:$('#ax-desc').value.trim()||catOf(pickedCat).label, category:pickedCat,
-    paidBy:$('#ax-paid').value, date:$('#ax-date').value||today(), splitAmong:[...state.draftSplit], settled:false });
-  pickedCat='food'; state.draftSplit=state.travelers.map(t=>t.id); save(); render();
+    paidBy:$('#ax-paid').value, date:$('#ax-date').value||today(), splitAmong:[...state.draftSplit], settled:false,
+    ...(items.length?{items}:{}) });
+  pickedCat='food'; state.draftSplit=state.travelers.map(t=>t.id); state.draftItems=[]; save(); render();
 }
 function deleteExpense(id){ confirmDialog('Delete this expense?', ()=>{ state.expenses=state.expenses.filter(e=>e.id!==id); save(); render(); }, 'Delete'); }
 function ledger(){
@@ -513,7 +540,7 @@ function ledger(){
       html+=`<div class="item${isSettled?' settled':''}" onclick="itemActions('${e.id}')" title="Tap for options">
         <div class="ic">${c.icon}</div>
         <div class="it-main"><div class="it-desc">${esc(e.desc)}${isSettled?'<span class="tag-settled">✓ settled</span>':''}</div>
-          <div class="it-meta">${esc(nameOf(e.paidBy))} paid · split ${esc(splitTxt)}</div></div>
+          <div class="it-meta">${esc(nameOf(e.paidBy))} paid · split ${esc(splitTxt)}${e.items&&e.items.length?` · ${e.items.length} items`:''}</div></div>
         <div class="it-amt"><div class="o">${money(e.amount,e.currency)}</div>${conv}</div></div>`;
     });
     html+=`</div>`;
@@ -633,10 +660,10 @@ function resetTrip(){
   }, 'Delete');
 }
 function exportCSV(){
-  const rows=[['Date','Description','Category','Amount','Currency','In '+state.baseCurrency,'Paid by','Split between']];
+  const rows=[['Date','Description','Category','Amount','Currency','In '+state.baseCurrency,'Paid by','Split between','Items']];
   state.expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
     const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
-    rows.push([e.date,e.desc,catOf(e.category).label,e.amount,e.currency,toBase(e.amount,e.currency).toFixed(2),nameOf(e.paidBy),grp.map(nameOf).join('; ')]);
+    rows.push([e.date,e.desc,catOf(e.category).label,e.amount,e.currency,toBase(e.amount,e.currency).toFixed(2),nameOf(e.paidBy),grp.map(nameOf).join('; '),(e.items||[]).map(it=>`${it.desc}:${it.amount}`).join(' | ')]);
   });
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   try{ const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
