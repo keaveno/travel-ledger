@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>Field Ledger</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E9E2D1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -17,12 +18,12 @@
     --disp:'Bricolage Grotesque', system-ui, sans-serif;
     --body:'Inter', system-ui, sans-serif; --mono:'Space Mono', ui-monospace, monospace;
   }
-  *{box-sizing:border-box} html,body{margin:0}
+  *{box-sizing:border-box} html,body{margin:0} html{background:var(--paper)}
   body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45;
     background:
       radial-gradient(circle at 12% 8%, rgba(197,64,47,.05), transparent 40%),
       radial-gradient(circle at 88% 4%, rgba(44,110,99,.06), transparent 38%), var(--paper);}
-  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 64px}
+  .wrap{max-width:560px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(64px + env(safe-area-inset-bottom))}
   .mono{font-family:var(--mono)} .danger{color:var(--bad)}
   .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 
@@ -58,7 +59,8 @@
     background:var(--surface-2);border:1.5px solid var(--line);border-radius:9px;outline:none;transition:.15s}
   input:focus,select:focus{border-color:var(--teal);background:#fff}
   input.mono{font-family:var(--mono)}
-  .row{display:flex;gap:9px;margin-bottom:12px} .row>div{flex:1}
+  .row{display:flex;gap:9px;margin-bottom:12px} .row>div{flex:1;min-width:0}
+  input,select{max-width:100%}
   .amt-row{display:grid;grid-template-columns:1.6fr 1fr;gap:9px}
   .field{margin-bottom:12px}
   .chips{display:flex;flex-wrap:wrap;gap:7px}
@@ -80,7 +82,8 @@
   .ic{width:34px;height:34px;flex:none;border-radius:9px;display:grid;place-items:center;font-size:17px;
     background:var(--surface-2);border:1px solid var(--line)}
   .it-main{flex:1;min-width:0}
-  .it-desc{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it-desc{font-weight:600;font-size:14.5px;display:flex;align-items:center;min-width:0}
+  .it-desc .desc-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .it-meta{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .it-amt{text-align:right;flex:none}
   .it-amt .o{font-family:var(--mono);font-weight:700;font-size:14.5px}
@@ -608,7 +611,7 @@ function ledger(){
       const isSettled = !!e.settled;
       html+=`<div class="item${isSettled?' settled':''}" onclick="itemActions('${e.id}')" title="Tap for options">
         <div class="ic">${c.icon}</div>
-        <div class="it-main"><div class="it-desc">${esc(e.desc)}${isSettled?'<span class="tag-settled">✓ settled</span>':''}</div>
+        <div class="it-main"><div class="it-desc"><span class="desc-txt">${esc(e.desc)}</span>${isSettled?'<span class="tag-settled">✓ settled</span>':''}</div>
           <div class="it-meta">${esc(nameOf(e.paidBy))} paid · split ${esc(splitTxt)}${e.items&&e.items.length?` · ${e.items.length} items`:''}</div></div>
         <div class="it-amt"><div class="o">${money(e.amount,e.currency)}</div>${conv}</div></div>`;
     });
