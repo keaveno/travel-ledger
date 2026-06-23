@@ -93,6 +93,8 @@
   .item.settled .it-desc,.item.settled .it-amt .o{color:var(--muted)}
   .tag-settled{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--good);
     border:1px solid var(--good);border-radius:10px;padding:1px 6px;margin-left:7px;letter-spacing:.04em;white-space:nowrap}
+  .tag-personal{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted);
+    border:1px solid var(--line);border-radius:10px;padding:1px 6px;margin-left:7px;letter-spacing:.04em;white-space:nowrap;opacity:.8}
 
   .empty{text-align:center;padding:30px 16px;color:var(--muted)}
   .empty .big{font-family:var(--disp);font-weight:700;font-size:17px;color:var(--ink);margin-bottom:5px}
@@ -285,13 +287,13 @@ function confirmDialog(message, onYes, yesLabel){
 // Tap a ledger row -> choose settled status or delete (per-item control).
 function itemActions(id){
   const e=state.expenses.find(x=>x.id===id); if(!e)return;
-  const done=!!e.settled;
+  const done=!!e.settled; const self=isSelfExpense(e);
   openModal(`<div class="mtext"><strong>${esc(e.desc)}</strong><br>
-    <span style="color:var(--muted);font-size:13px">${money(e.amount,e.currency)} · ${esc(payerText(e))} paid</span>
+    <span style="color:var(--muted);font-size:13px">${money(e.amount,e.currency)} · ${esc(payerText(e))} paid${self?' · personal':''}</span>
     ${e.items&&e.items.length?`<div style="margin-top:6px;font-size:12.5px;color:var(--muted)">${e.items.map(it=>`${esc(it.desc||'item')} · ${money(it.amount,e.currency)}${it.splitAmong&&it.splitAmong.length?' · '+esc(it.splitAmong.map(nameOf).join(', ')):''}`).join('<br>')}</div>`:''}</div>
     <div class="sheet">
       <button class="btn sm" onclick="editExpense('${id}')">Edit</button>
-      <button class="btn sm" onclick="setItemSettled('${id}',${done?'false':'true'})">${done?'Mark as not settled':'Mark as settled'}</button>
+      ${self?'':`<button class="btn sm" onclick="setItemSettled('${id}',${done?'false':'true'})">${done?'Mark as not settled':'Mark as settled'}</button>`}
       <button class="btn ghost sm" onclick="askDelete('${id}')"><span class="danger">Delete expense</span></button>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button>
     </div>`);
@@ -330,6 +332,15 @@ function expenseMembers(e){
   if(e.items&&e.items.length){ const s=new Set(base); e.items.forEach(it=>(it.splitAmong||[]).forEach(id=>s.add(id))); return [...s]; }
   return base;
 }
+// A purely personal expense: one payer who is also the only person it's split among. Nothing to settle.
+function isSelfExpense(e){
+  const payers=payersOf(e).map(p=>p.id);
+  if(payers.length!==1) return false;
+  const members=expenseMembers(e);
+  return members.length>0 && members.every(id=>id===payers[0]);
+}
+// Effectively settled: explicitly settled, or a self-expense that never created any debt.
+function effSettled(e){ return !!e.settled || isSelfExpense(e); }
 function netFrom(expenses){
   const net={}; state.travelers.forEach(t=>net[t.id]=0);
   const everyone=state.travelers.map(t=>t.id);
@@ -365,7 +376,7 @@ function transfersFrom(net){
 // Each expense carries its own `settled` flag (the source of truth). Outstanding
 // balances come only from unsettled expenses, so settling never touches new items.
 function settlementInfo(){
-  const unsettled=state.expenses.filter(e=>!e.settled);
+  const unsettled=state.expenses.filter(e=>!effSettled(e));
   const adj=netFrom(unsettled);
   const transfers=transfersFrom(adj);
   const anySettled=state.expenses.some(e=>e.settled);
@@ -663,10 +674,11 @@ function ledger(){
       const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
       const splitTxt=grp.length===state.travelers.length?'everyone':grp.map(nameOf).join(', ');
       const conv=e.currency!==state.baseCurrency?`<div class="b">${money(toBase(e.amount,e.currency),state.baseCurrency)}</div>`:'';
-      const isSettled = !!e.settled;
-      html+=`<div class="item${isSettled?' settled':''}" onclick="itemActions('${e.id}')" title="Tap for options">
+      const settledReal = !!e.settled; const personal = isSelfExpense(e);
+      const tag = settledReal?'<span class="tag-settled">✓ settled</span>':(personal?'<span class="tag-personal">personal</span>':'');
+      html+=`<div class="item${settledReal?' settled':''}" onclick="itemActions('${e.id}')" title="Tap for options">
         <div class="ic">${c.icon}</div>
-        <div class="it-main"><div class="it-desc"><span class="desc-txt">${esc(e.desc)}</span>${isSettled?'<span class="tag-settled">✓ settled</span>':''}</div>
+        <div class="it-main"><div class="it-desc"><span class="desc-txt">${esc(e.desc)}</span>${tag}</div>
           <div class="it-meta">${esc(payerText(e))} paid · split ${esc(splitTxt)}${e.items&&e.items.length?` · ${e.items.length} items`:''}</div></div>
         <div class="it-amt"><div class="o">${money(e.amount,e.currency)}</div>${conv}</div></div>`;
     });
