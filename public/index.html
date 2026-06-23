@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Field Ledger</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#E9E2D1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,11 +18,13 @@
     --disp:'Bricolage Grotesque', system-ui, sans-serif;
     --body:'Inter', system-ui, sans-serif; --mono:'Space Mono', ui-monospace, monospace;
   }
-  *{box-sizing:border-box} html,body{margin:0} html{background:var(--paper)}
-  body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45;
+  *{box-sizing:border-box} html,body{margin:0}
+  /* Same background on html and body so the zoom-out / overscroll surround matches the page exactly. */
+  html,body{min-height:100%;
     background:
       radial-gradient(circle at 12% 8%, rgba(197,64,47,.05), transparent 40%),
       radial-gradient(circle at 88% 4%, rgba(44,110,99,.06), transparent 38%), var(--paper);}
+  body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45}
   .wrap{max-width:560px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(64px + env(safe-area-inset-bottom))}
   .mono{font-family:var(--mono)} .danger{color:var(--bad)}
   .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
@@ -61,6 +63,7 @@
   input.mono{font-family:var(--mono)}
   .row{display:flex;gap:9px;margin-bottom:12px} .row>div{flex:1;min-width:0}
   input,select{max-width:100%}
+  input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;text-align:left}
   .amt-row{display:grid;grid-template-columns:1.6fr 1fr;gap:9px}
   .field{margin-bottom:12px}
   .chips{display:flex;flex-wrap:wrap;gap:7px}
