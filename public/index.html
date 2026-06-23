@@ -206,7 +206,7 @@ let sync = 'idle';            // idle | s (syncing) | ok (synced) | off (offline
 
 /* ---------- only the trip's own data goes to the server ---------- */
 function persistable(){
-  const {activeTab, draftSplit, draftItems, tripCode, screen, ...rest} = state; return rest;
+  const {activeTab, draftSplit, draftItems, draftMode, editingId, tripCode, screen, ...rest} = state; return rest;
 }
 
 /* ---------- localStorage: remember code + offline cache ---------- */
@@ -234,7 +234,7 @@ async function pullLoad(code){
 }
 function applyRemote(d){
   if(!d) return;
-  const keep={activeTab:state.activeTab, tripCode:state.tripCode, screen:state.screen, draftSplit:state.draftSplit, draftItems:state.draftItems};
+  const keep={activeTab:state.activeTab, tripCode:state.tripCode, screen:state.screen, draftSplit:state.draftSplit, draftItems:state.draftItems, draftMode:state.draftMode, editingId:state.editingId};
   state={...freshState(), ...d, ...keep, setupComplete:true};
 }
 async function syncNow(){
@@ -285,8 +285,9 @@ function itemActions(id){
   const done=!!e.settled;
   openModal(`<div class="mtext"><strong>${esc(e.desc)}</strong><br>
     <span style="color:var(--muted);font-size:13px">${money(e.amount,e.currency)} · ${esc(nameOf(e.paidBy))} paid</span>
-    ${e.items&&e.items.length?`<div style="margin-top:6px;font-size:12.5px;color:var(--muted)">${e.items.map(it=>`${esc(it.desc||'item')} · ${money(it.amount,e.currency)}`).join('<br>')}</div>`:''}</div>
+    ${e.items&&e.items.length?`<div style="margin-top:6px;font-size:12.5px;color:var(--muted)">${e.items.map(it=>`${esc(it.desc||'item')} · ${money(it.amount,e.currency)}${it.splitAmong&&it.splitAmong.length?' · '+esc(it.splitAmong.map(nameOf).join(', ')):''}`).join('<br>')}</div>`:''}</div>
     <div class="sheet">
+      <button class="btn sm" onclick="editExpense('${id}')">Edit</button>
       <button class="btn sm" onclick="setItemSettled('${id}',${done?'false':'true'})">${done?'Mark as not settled':'Mark as settled'}</button>
       <button class="btn ghost sm" onclick="askDelete('${id}')"><span class="danger">Delete expense</span></button>
       <button class="btn ghost sm" onclick="closeModal()">Cancel</button>
@@ -296,8 +297,7 @@ function setItemSettled(id,val){ const e=state.expenses.find(x=>x.id===id); if(e
 function askDelete(id){ closeModal(); confirmDialog('Delete this expense?', ()=>{ state.expenses=state.expenses.filter(e=>e.id!==id); save(); render(); }, 'Delete'); }
 // Settle just the items behind one relationship: items the creditor paid and the debtor shares in.
 function settleRelationship(from,to){
-  const affected=state.expenses.filter(e=>!e.settled && e.paidBy===to &&
-    ((e.splitAmong&&e.splitAmong.length?e.splitAmong:state.travelers.map(t=>t.id)).includes(from)));
+  const affected=state.expenses.filter(e=>!e.settled && e.paidBy===to && expenseMembers(e).includes(from));
   affected.forEach(e=>e.settled=true); save(); render(); toast('Settled '+nameOf(from)+' → '+nameOf(to));
 }
 function askSettleRel(from,to){ confirmDialog('Mark all items in '+nameOf(from)+' → '+nameOf(to)+' as settled?', ()=>settleRelationship(from,to), 'Settle'); }
@@ -307,13 +307,34 @@ function copyCode(){ if(navigator.clipboard) navigator.clipboard.writeText(state
 /* ---------- computations ---------- */
 function tripTotal(){ return state.expenses.reduce((s,e)=>s+toBase(e.amount,e.currency),0); }
 function byCategory(){ const m={}; state.expenses.forEach(e=>{m[e.category]=(m[e.category]||0)+toBase(e.amount,e.currency);}); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+// Per person across ALL expenses: paid out of pocket, and share consumed (paid − net).
+function spendByPerson(){
+  const net=netFrom(state.expenses); const paid={}; state.travelers.forEach(t=>paid[t.id]=0);
+  state.expenses.forEach(e=>{ if(paid[e.paidBy]!==undefined) paid[e.paidBy]+=toBase(e.amount,e.currency); });
+  return state.travelers.map(t=>({id:t.id, name:t.name, paid:paid[t.id]||0, share:(paid[t.id]||0)-(net[t.id]||0)}));
+}
+// Members who could owe on an expense: the expense-level split plus anyone
+// named on an item (used to decide which relationships an expense touches).
+function expenseMembers(e){
+  const everyone=state.travelers.map(t=>t.id);
+  const base=(e.splitAmong&&e.splitAmong.length)?e.splitAmong.slice():everyone.slice();
+  if(e.items&&e.items.length){ const s=new Set(base); e.items.forEach(it=>(it.splitAmong||[]).forEach(id=>s.add(id))); return [...s]; }
+  return base;
+}
 function netFrom(expenses){
   const net={}; state.travelers.forEach(t=>net[t.id]=0);
+  const everyone=state.travelers.map(t=>t.id);
+  const owe=(amt,grp)=>{ if(!grp.length) return; const share=amt/grp.length; grp.forEach(id=>{ if(net[id]!==undefined) net[id]-=share; }); };
   expenses.forEach(e=>{
     const b=toBase(e.amount,e.currency);
     if(net[e.paidBy]!==undefined) net[e.paidBy]+=b;
-    const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
-    const share=b/grp.length; grp.forEach(id=>{ if(net[id]!==undefined) net[id]-=share; });
+    const expGrp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:everyone;
+    if(e.items&&e.items.length){
+      let itemsBase=0;
+      e.items.forEach(it=>{ const ib=toBase(it.amount||0,e.currency); itemsBase+=ib;
+        owe(ib,(it.splitAmong&&it.splitAmong.length)?it.splitAmong:expGrp); });
+      const remainder=b-itemsBase; if(Math.abs(remainder)>0.0001) owe(remainder,expGrp); // unitemized portion (tax/tip/etc.)
+    } else { owe(b,expGrp); }
   });
   return net;
 }
@@ -464,43 +485,64 @@ function tabContent(){
 let pickedCat='food';
 function addForm(){
   if(state.draftSplit===null) state.draftSplit=state.travelers.map(t=>t.id);
-  const travOpts=state.travelers.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  const ed = state.editingId ? state.expenses.find(x=>x.id===state.editingId) : null;
+  const mode = state.draftMode||'even';
+  const travOpts=state.travelers.map(t=>`<option value="${t.id}" ${ed&&ed.paidBy===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
+  const seg=(m,label)=>`<button type="button" id="ax-seg-${m}" class="btn ${mode===m?'':'ghost'} sm" style="flex:1" onclick="setDraftMode('${m}')">${label}</button>`;
   return `<div class="card">
-    <h2>Add an expense</h2>
+    <h2>${ed?'Edit expense':'Add an expense'}</h2>
     <div class="amt-row">
-      <div><label class="f">Amount</label><input id="ax-amt" class="mono" inputmode="decimal" placeholder="0"></div>
-      <div><label class="f">Currency</label>${currencySelect('ax-cur', lastUsedCurrency())}</div></div>
-    <div class="field"><label class="f">What for</label><input id="ax-desc" placeholder="e.g. Dinner at night market"></div>
-    <div class="field"><label class="f">Items <span style="color:var(--muted);font-weight:400">(optional breakdown)</span></label>
-      <div id="ax-items">${itemRowsHTML()}</div>
-      <button type="button" class="btn ghost sm" onclick="addDraftItem()">+ add item</button></div>
+      <div><label class="f">Amount</label><input id="ax-amt" class="mono" inputmode="decimal" placeholder="0" value="${ed?esc(String(ed.amount)):''}"></div>
+      <div><label class="f">Currency</label>${currencySelect('ax-cur', ed?ed.currency:lastUsedCurrency())}</div></div>
+    <div class="field"><label class="f">What for</label><input id="ax-desc" placeholder="e.g. Dinner at night market" value="${ed?esc(ed.desc):''}"></div>
     <div class="field"><label class="f">Category</label>
       <div class="cat-pick" id="ax-cats">${CATS.map((c,i)=>`<span class="chip cat ${c.id===pickedCat?'on':''}" data-cat="${c.id}" onclick="pickCat('${c.id}')">${c.icon} ${c.label}</span>`).join('')}</div></div>
     <div class="row">
       <div><label class="f">Paid by</label><select id="ax-paid">${travOpts}</select></div>
-      <div><label class="f">Date</label><input id="ax-date" type="date" value="${today()}"></div></div>
-    <div class="field"><label class="f">Split between</label>
+      <div><label class="f">Date</label><input id="ax-date" type="date" value="${ed?esc(ed.date):today()}"></div></div>
+    <div class="field"><label class="f">How to split</label>
+      <div style="display:flex;gap:6px">${seg('even','Evenly')}${seg('item','By item')}</div></div>
+    <div class="field" id="ax-even" style="display:${mode==='even'?'':'none'}"><label class="f">Split between</label>
       <div class="chips" id="ax-split">${state.travelers.map(t=>`<span class="chip ${state.draftSplit.includes(t.id)?'on':''}" data-id="${t.id}" onclick="toggleSplit('${t.id}')">${esc(t.name)}</span>`).join('')}</div></div>
-    <button class="btn" onclick="addExpense()">Add to ledger</button>
+    <div class="field" id="ax-itemwrap" style="display:${mode==='item'?'':'none'}"><label class="f">Items <span style="color:var(--muted);font-weight:400">— each splits among its own people; any Amount above the items total splits among everyone here</span></label>
+      <div id="ax-items">${itemRowsHTML()}</div>
+      <button type="button" class="btn ghost sm" onclick="addDraftItem()">+ add item</button></div>
+    <button class="btn" onclick="addExpense()">${ed?'Save changes':'Add to ledger'}</button>
+    ${ed?`<button class="btn ghost" style="margin-top:8px" onclick="cancelEdit()">Cancel</button>`:''}
   </div>`;
+}
+function setDraftMode(m){
+  state.draftMode=m;
+  const ev=$('#ax-even'), it=$('#ax-itemwrap'); if(ev) ev.style.display=m==='even'?'':'none'; if(it) it.style.display=m==='item'?'':'none';
+  const be=$('#ax-seg-even'), bi=$('#ax-seg-item'); if(be) be.classList.toggle('ghost',m!=='even'); if(bi) bi.classList.toggle('ghost',m!=='item');
 }
 function itemRowsHTML(){
   if(!Array.isArray(state.draftItems)) state.draftItems=[];
-  const rows=state.draftItems.map((it,i)=>`<div class="ax-item" style="display:flex;gap:6px;margin-bottom:6px">
-    <input class="axi-desc" style="flex:1" placeholder="item" value="${esc(it.desc||'')}">
-    <input class="axi-amt mono" style="width:90px" inputmode="decimal" placeholder="0" value="${esc(String(it.amount??''))}">
-    <button type="button" class="btn ghost sm" onclick="removeDraftItem(${i})">✕</button></div>`).join('');
+  const rows=state.draftItems.map((it,i)=>{
+    const mem=Array.isArray(it.splitAmong)?it.splitAmong:[];
+    const chips=state.travelers.map(t=>`<span class="chip axi-mem ${mem.includes(t.id)?'on':''}" data-id="${t.id}" onclick="toggleItemMember(this)">${esc(t.name)}</span>`).join('');
+    return `<div class="ax-item" style="border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:8px;margin-bottom:8px">
+      <div style="display:flex;gap:6px">
+        <input class="axi-desc" style="flex:1" placeholder="item" value="${esc(it.desc||'')}">
+        <input class="axi-amt mono" style="width:80px" inputmode="decimal" placeholder="0" value="${esc(String(it.amount??''))}">
+        <button type="button" class="btn ghost sm" onclick="removeDraftItem(${i})">✕</button></div>
+      <div class="chips" style="margin-top:6px">${chips}</div></div>`;
+  }).join('');
   if(!state.draftItems.length) return rows;
   const code=($('#ax-cur')&&$('#ax-cur').value)||lastUsedCurrency();
   const sum=state.draftItems.reduce((s,it)=>s+(parseFloat(it.amount)||0),0);
-  return rows+`<div class="hint">Items total ${money(sum,code)}</div>`;
+  return rows+`<div class="hint">Items total ${money(sum,code)} · each item splits among its selected people</div>`;
 }
 function syncDraftItems(){
   if(!Array.isArray(state.draftItems)) state.draftItems=[];
-  state.draftItems=Array.from(document.querySelectorAll('#ax-items .ax-item')).map(r=>({desc:r.querySelector('.axi-desc').value, amount:r.querySelector('.axi-amt').value}));
+  state.draftItems=Array.from(document.querySelectorAll('#ax-items .ax-item')).map(r=>({
+    desc:r.querySelector('.axi-desc').value,
+    amount:r.querySelector('.axi-amt').value,
+    splitAmong:Array.from(r.querySelectorAll('.axi-mem.on')).map(c=>c.dataset.id) }));
 }
 function renderDraftItems(){ const c=$('#ax-items'); if(c) c.innerHTML=itemRowsHTML(); }
-function addDraftItem(){ syncDraftItems(); state.draftItems.push({desc:'',amount:''}); renderDraftItems(); }
+function toggleItemMember(el){ el.classList.toggle('on'); }
+function addDraftItem(){ syncDraftItems(); state.draftItems.push({desc:'',amount:'',splitAmong:state.travelers.map(t=>t.id)}); renderDraftItems(); }
 function removeDraftItem(i){ syncDraftItems(); state.draftItems.splice(i,1); renderDraftItems(); }
 function pickCat(id){ pickedCat=id; document.querySelectorAll('#ax-cats .chip').forEach(c=>c.classList.toggle('on',c.dataset.cat===id)); }
 function toggleSplit(id){
@@ -510,17 +552,44 @@ function toggleSplit(id){
 }
 function lastUsedCurrency(){ return state.expenses.length?state.expenses[state.expenses.length-1].currency:state.baseCurrency; }
 function addExpense(){
-  syncDraftItems();
-  const items=state.draftItems.map(it=>({desc:(it.desc||'').trim(), amount:parseFloat(it.amount)||0})).filter(it=>it.desc||it.amount);
+  const mode=state.draftMode||'even';
+  let items=[];
+  if(mode==='item'){ syncDraftItems();
+    items=state.draftItems.map(it=>({desc:(it.desc||'').trim(), amount:parseFloat(it.amount)||0, splitAmong:(it.splitAmong||[]).slice()})).filter(it=>it.desc||it.amount); }
+  const itemsSum=items.reduce((s,it)=>s+it.amount,0);
   let amt=parseFloat($('#ax-amt').value);
-  if((!amt||amt<=0) && items.length) amt=items.reduce((s,it)=>s+it.amount,0);
+  if((!amt||amt<=0) && mode==='item' && items.length) amt=itemsSum;
   if(!amt||amt<=0){ toast('Enter an amount first.'); return; }
-  state.expenses.push({ id:uid(), amount:amt, currency:$('#ax-cur').value,
-    desc:$('#ax-desc').value.trim()||catOf(pickedCat).label, category:pickedCat,
-    paidBy:$('#ax-paid').value, date:$('#ax-date').value||today(), splitAmong:[...state.draftSplit], settled:false,
-    ...(items.length?{items}:{}) });
-  pickedCat='food'; state.draftSplit=state.travelers.map(t=>t.id); state.draftItems=[]; save(); render();
+  let splitAmong;
+  if(mode==='item'){
+    const u=new Set(); items.forEach(it=>it.splitAmong.forEach(id=>u.add(id)));
+    splitAmong = u.size ? [...u] : state.travelers.map(t=>t.id);
+  } else { splitAmong=[...state.draftSplit]; }
+  const itemDesc=items.map(i=>i.desc).filter(Boolean).join(', ');
+  const base={ amount:amt, currency:$('#ax-cur').value,
+    desc:$('#ax-desc').value.trim()||itemDesc||catOf(pickedCat).label, category:pickedCat,
+    paidBy:$('#ax-paid').value, date:$('#ax-date').value||today(), splitAmong };
+  const hasItems = mode==='item' && items.length;
+  if(state.editingId){
+    const e=state.expenses.find(x=>x.id===state.editingId);
+    if(e){ Object.assign(e, base); if(hasItems) e.items=items; else delete e.items; }
+    state.editingId=null; toast('Expense updated');
+  } else {
+    state.expenses.push({ id:uid(), ...base, settled:false, ...(hasItems?{items}:{}) });
+  }
+  pickedCat='food'; state.draftSplit=state.travelers.map(t=>t.id); state.draftItems=[]; state.draftMode='even'; save(); render();
 }
+function editExpense(id){
+  const e=state.expenses.find(x=>x.id===id); if(!e) return;
+  closeModal();
+  state.editingId=id; pickedCat=e.category||'food';
+  state.draftMode=(e.items&&e.items.length)?'item':'even';
+  state.draftSplit=(e.splitAmong&&e.splitAmong.length)?[...e.splitAmong]:state.travelers.map(t=>t.id);
+  state.draftItems=(e.items||[]).map(it=>({desc:it.desc||'', amount:String(it.amount??''), splitAmong:(it.splitAmong||[]).slice()}));
+  state.activeTab='log'; render();
+  const f=$('#ax-amt'); if(f) f.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function cancelEdit(){ state.editingId=null; pickedCat='food'; state.draftSplit=state.travelers.map(t=>t.id); state.draftItems=[]; state.draftMode='even'; render(); }
 function deleteExpense(id){ confirmDialog('Delete this expense?', ()=>{ state.expenses=state.expenses.filter(e=>e.id!==id); save(); render(); }, 'Delete'); }
 function ledger(){
   if(!state.expenses.length) return `<div class="card"><div class="empty"><div class="big">No expenses yet</div>Add your first one above — coffee, the airport taxi, anything.</div></div>`;
@@ -577,6 +646,11 @@ function balancesView(){
       html+=`<div class="bal"><div class="nm">${c.icon} ${c.label}<small>${pct}% of trip</small></div><div class="v">${money(v,state.baseCurrency)}</div></div>`; });
     html+=`</div>`;
   }
+  html+=`<div class="card"><h2>Each person's share</h2>`;
+  spendByPerson().forEach(p=>{
+    html+=`<div class="bal"><div class="nm">${esc(p.name)}</div><div class="v">${money(p.share,state.baseCurrency)}</div></div>`;
+  });
+  html+=`</div>`;
   return html;
 }
 
@@ -663,7 +737,7 @@ function exportCSV(){
   const rows=[['Date','Description','Category','Amount','Currency','In '+state.baseCurrency,'Paid by','Split between','Items']];
   state.expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
     const grp=(e.splitAmong&&e.splitAmong.length)?e.splitAmong:state.travelers.map(t=>t.id);
-    rows.push([e.date,e.desc,catOf(e.category).label,e.amount,e.currency,toBase(e.amount,e.currency).toFixed(2),nameOf(e.paidBy),grp.map(nameOf).join('; '),(e.items||[]).map(it=>`${it.desc}:${it.amount}`).join(' | ')]);
+    rows.push([e.date,e.desc,catOf(e.category).label,e.amount,e.currency,toBase(e.amount,e.currency).toFixed(2),nameOf(e.paidBy),grp.map(nameOf).join('; '),(e.items||[]).map(it=>`${it.desc}:${it.amount}(${(it.splitAmong||[]).map(nameOf).join('/')})`).join(' | ')]);
   });
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   try{ const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
